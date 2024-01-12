@@ -1,5 +1,6 @@
 import fs from 'fs';
 import process from 'process';
+import { Readable } from 'stream';
 
 export async function main() {
   const { invalidFlags, validFlags, filePath } = parseArgs(
@@ -35,9 +36,7 @@ main().catch((error: unknown) => {
   process.exit(1);
 });
 
-async function readStream(
-  stream: NodeJS.ReadStream | fs.ReadStream
-): Promise<string> {
+async function readStream(stream: Readable): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of stream) {
     chunks.push(chunk);
