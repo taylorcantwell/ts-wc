@@ -2,31 +2,38 @@ import fs from 'fs';
 import process from 'process';
 
 export async function main() {
-  try {
-    const args = process.argv.slice(2);
-    const flags = parseFlags(args);
-    const filePath = validateFilePath(args);
+  const { invalidFlags, validFlags, filePath } = parseArgs(
+    process.argv.slice(2)
+  );
 
-    let stdout = '';
-
-    if (filePath) {
-      const fileContents = fs.readFileSync(filePath, 'utf-8');
-      stdout = `${composeStdout(fileContents, flags)} ${filePath}`;
-    } else if (!process.stdin.isTTY) {
-      const fileContents = await readStream(process.stdin);
-      stdout = composeStdout(fileContents, flags);
-    } else {
-      throw new Error('No file or stream given');
-    }
-
-    console.log(stdout);
-    process.exit(0);
-  } catch (error) {
-    console.error((error as Error).message);
-    process.exit(1);
+  if (invalidFlags.size > 0) {
+    throw new Error(`Invalid flags: ${Array.from(invalidFlags).join(', ')}`);
   }
+
+  if (filePath && !fs.existsSync(filePath)) {
+    throw new Error(`File does not exist: ${filePath}`);
+  }
+
+  let stdout = '';
+
+  if (filePath) {
+    const fileContents = fs.readFileSync(filePath, 'utf-8');
+    stdout = `${composeStdout(fileContents, validFlags)} ${filePath}`;
+  } else if (!process.stdin.isTTY) {
+    const fileContents = await readStream(process.stdin);
+    stdout = composeStdout(fileContents, validFlags);
+  } else {
+    throw new Error('No file or stream given');
+  }
+
+  console.log(stdout);
+  process.exit(0);
 }
-main();
+
+main().catch((error: unknown) => {
+  console.error((error as Error).message);
+  process.exit(1);
+});
 
 async function readStream(
   stream: NodeJS.ReadStream | fs.ReadStream
@@ -40,69 +47,82 @@ async function readStream(
 
 type Flags = '-c' | '-l' | '-w' | '-m';
 
-function parseFlags(args: string[]): Flags[] {
+function parseArgs(args: string[]): {
+  invalidFlags: Set<String>;
+  validFlags: Set<Flags>;
+  filePath: string;
+} {
   const availableFlags: Set<Flags> = new Set(['-c', '-l', '-w', '-m']);
+  const invalidFlags: Set<string> = new Set();
+  const validFlags: Set<Flags> = new Set();
+  let filePath = '';
 
-  const unavailableFlags = args.filter(
-    (arg) => !availableFlags.has(arg as Flags) && arg.startsWith('-')
-  );
+  for (const arg of args) {
+    if (availableFlags.has(arg as Flags)) {
+      validFlags.add(arg as Flags);
+    }
 
-  if (unavailableFlags.length > 0) {
-    throw new Error(`Unknown flag: ${unavailableFlags.join(' ')}`);
+    if (!availableFlags.has(arg as Flags) && arg.startsWith('-')) {
+      invalidFlags.add(arg);
+    }
+
+    /** Only supporting 1 file */
+    if (!arg.startsWith('-')) {
+      filePath = arg;
+      break;
+    }
   }
 
-  const flags = args.filter((arg) =>
-    availableFlags.has(arg as Flags)
-  ) as Flags[];
-
-  /** Remove duplicate flags */
-  return [...new Set(flags)];
+  return { invalidFlags, validFlags, filePath };
 }
 
-function validateFilePath(args: string[]): string | undefined {
-  const filePath = args.find((arg) => !arg.startsWith('-'));
-
-  if (filePath && !fs.existsSync(filePath)) {
-    throw new Error('File does not exist');
-  }
-
-  return filePath;
-}
-
-function getLineCount(fileContent: string) {
+function getLineCount(fileContent: string): number {
   return fileContent.split('\n').length;
 }
 
-function getWordCount(fileContent: string) {
+function getWordCount(fileContent: string): number {
   return fileContent.trim().split(/\s+/).length;
 }
 
-function getCharacterCount(fileContent: string) {
+function getCharacterCount(fileContent: string): number {
   return fileContent.length;
 }
 
-function getBytesCount(fileContent: string) {
+function getByteCount(fileContent: string): number {
   return Buffer.byteLength(fileContent);
 }
 
-/**
- * Composes the standard output based on the provided file contents and flags.
- * Defaults to returning the line count, word count, and character count (in that order)
- * if no flags are specified.
- */
-function composeStdout(fileContents: string, flags: Flags[]) {
-  if (flags.length === 0) {
+function composeStdout(fileContents: string, flags: Set<Flags>): string {
+  if (flags.size === 0) {
     return `${getLineCount(fileContents)} ${getWordCount(
       fileContents
-    )} ${getCharacterCount(fileContents)}`;
+    )} ${getByteCount(fileContents)}`;
   }
 
-  const flagFunctions: Record<Flags, (fileContent: string) => number> = {
-    '-c': getCharacterCount,
-    '-l': getLineCount,
-    '-w': getWordCount,
-    '-m': getBytesCount,
-  };
+  let result = '';
 
-  return flags.map((flag) => flagFunctions[flag](fileContents)).join(' ');
+  for (let flag of flags) {
+    switch (flag) {
+      case '-c': {
+        result += getCharacterCount(fileContents);
+        break;
+      }
+      case '-l': {
+        result += getLineCount(fileContents);
+        break;
+      }
+      case '-w': {
+        result += getWordCount(fileContents);
+        break;
+      }
+      case '-m': {
+        result += getByteCount(fileContents);
+        break;
+      }
+      default:
+        throw new Error('This should not happen.');
+    }
+  }
+
+  return result.trim();
 }
