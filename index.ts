@@ -99,24 +99,24 @@ function composeStdout(fileContents: string, flags: Set<Flags>): string {
     )} ${getByteCount(fileContents)}`;
   }
 
-  let result = '';
+  let stdout = '';
 
   for (let flag of flags) {
     switch (flag) {
       case '-c': {
-        result += getCharacterCount(fileContents);
+        stdout += getCharacterCount(fileContents);
         break;
       }
       case '-l': {
-        result += getLineCount(fileContents);
+        stdout += getLineCount(fileContents);
         break;
       }
       case '-w': {
-        result += getWordCount(fileContents);
+        stdout += getWordCount(fileContents);
         break;
       }
       case '-m': {
-        result += getByteCount(fileContents);
+        stdout += getByteCount(fileContents);
         break;
       }
       default:
@@ -124,5 +124,5 @@ function composeStdout(fileContents: string, flags: Set<Flags>): string {
     }
   }
 
-  return result.trim();
+  return stdout.trim();
 }
